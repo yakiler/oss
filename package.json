@@ -75,6 +75,7 @@
     "del-cli": "^5.1.0",
     "eslint": "^8.51.0",
     "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-jest": "^29.0.1",
     "eslint-plugin-prettier": "^5.0.1",
     "jest": "^29.7.0",
     "prettier": "^3.0.3",
@@ -119,10 +120,13 @@
     "github": {
       "release": true
     },
-    "plugins": {
+    "plugins": [{
       "@release-it/conventional-changelog": {
         "preset": "angular"
       }
+    }, "jest"],
+    "env": {
+      "jest/globals": true
     }
   },
   "eslintConfig": {

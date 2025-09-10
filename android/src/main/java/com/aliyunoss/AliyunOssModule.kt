@@ -14,6 +14,7 @@ import com.alibaba.sdk.android.oss.*
 import com.alibaba.sdk.android.oss.common.auth.*
 import com.alibaba.sdk.android.oss.model.*
 import com.alibaba.sdk.android.oss.callback.*
+import com.alibaba.sdk.android.oss.internal.OSSAsyncTask
 
 import android.util.Log
 
@@ -21,6 +22,7 @@ class AliyunOssModule(reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
 
   private var ossClient: OSSClient? = null
+  private val uploadTasks = mutableMapOf<String, OSSAsyncTask<PutObjectResult>>()
 
   override fun getName(): String {
     return NAME
@@ -66,16 +68,24 @@ class AliyunOssModule(reactContext: ReactApplicationContext) :
 
   /** 简单上传 异步 + 进度 + 回调 */
   @ReactMethod
-  fun simpleUpload(bucket: String, targetPath: String, localFilePath: String, promise: Promise) {
+  fun simpleUpload(bucket: String, targetPath: String, localFilePath: String, uploadId: String, promise: Promise) {
       try {
+        Log.d("UploadModule", "simpleUpload桶桶桶桶桶桶: $bucket")
+        Log.d("UploadModule", "simpleUpload目标路径: $targetPath")
+        Log.d("UploadModule", "simpleUpload本地路径: $localFilePath")
+        Log.d("UploadModule", "simpleUpload-iDDDD: $uploadId")
           val request = PutObjectRequest(bucket, targetPath, localFilePath).apply {
+            Log.d("UploadModule", "pubobjectrequst")
               // 设置进度回调
               progressCallback = OSSProgressCallback<PutObjectRequest> { _, currentSize, totalSize ->
+                Log.d("UploadModule", "progressCallback")
                   val params = Arguments.createMap().apply {
+                      putString("uploadId", uploadId)
                       putString("type", "progress")
                       putDouble("current", currentSize.toDouble())
                       putDouble("total", totalSize.toDouble())
                   }
+                  Log.d("UploadModule", "AliyunOssProgress")
                   reactApplicationContext
                       .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
                       .emit("AliyunOssProgress", params)
@@ -83,11 +93,13 @@ class AliyunOssModule(reactContext: ReactApplicationContext) :
           }
 
           // 异步上传
-          ossClient?.asyncPutObject(
+          val task = ossClient?.asyncPutObject(
               request,
               object : OSSCompletedCallback<PutObjectRequest, PutObjectResult> {
                   override fun onSuccess(req: PutObjectRequest, result: PutObjectResult) {
+                      Log.d("UploadModule", "success")
                       promise.resolve(result.serverCallbackReturnBody ?: "done")
+                      uploadTasks.remove(uploadId) // ✅ 成功后移除任务
                   }
 
                   override fun onFailure(
@@ -95,12 +107,46 @@ class AliyunOssModule(reactContext: ReactApplicationContext) :
                       clientEx: ClientException?,
                       serviceEx: ServiceException?
                   ) {
+                      Log.d("UploadModule", "failure")
                       promise.reject("UPLOAD_FAIL", clientEx ?: serviceEx)
+                      uploadTasks.remove(uploadId) // ✅ 失败后移除任务
+
+                      val params = Arguments.createMap().apply {
+                          putString("uploadId", uploadId)
+                          putString("type", "failed")
+                          putString("error", clientEx?.message ?: serviceEx?.rawMessage ?: "unknown")
+                      }
+                      reactApplicationContext
+                          .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                          .emit("AliyunOssProgress", params)
                   }
               }
           )
+
+          if (task != null) {
+              uploadTasks[uploadId] = task // ✅ 保存任务，便于取消
+          } else {
+              promise.reject("UPLOAD_FAIL", "OSS client not initialized")
+          }
       } catch (e: Exception) {
           promise.reject("UPLOAD_EXCEPTION", e)
+      }
+  }
+
+  // 取消上传
+  @ReactMethod
+  fun cancelUpload(uploadId: String) {
+      uploadTasks[uploadId]?.let { task ->
+          task.cancel() // ✅ 直接调用 OSSAsyncTask.cancel()
+          uploadTasks.remove(uploadId)
+
+          val params = Arguments.createMap().apply {
+              putString("uploadId", uploadId)
+              putString("type", "cancelled")
+          }
+          reactApplicationContext
+              .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+              .emit("AliyunOssProgress", params)
       }
   }
 

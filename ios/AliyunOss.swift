@@ -6,6 +6,7 @@ import React
 class AliyunOss: RCTEventEmitter {
     
     private var client: OSSClient?
+    var tasks: [String: OSSPutObjectRequest] = [:] // 存请求对象，而不是 OSSTask
     
     // 必须实现，声明模块支持的事件
     override func supportedEvents() -> [String]! {
@@ -47,10 +48,11 @@ class AliyunOss: RCTEventEmitter {
     }
     
     // 异步上传（带进度）
-    @objc(simpleUpload:withTargetPath:withLocalFilePath:withResolver:withRejecter:)
+    @objc(simpleUpload:withTargetPath:withLocalFilePath:withUploadId:withResolver:withRejecter:)
     func simpleUpload(bucket: String,
                       targetPath: String,
                       localFilePath: String,
+                      uploadId: String,
                       resolve: @escaping RCTPromiseResolveBlock,
                       reject: @escaping RCTPromiseRejectBlock) {
         
@@ -79,6 +81,7 @@ class AliyunOss: RCTEventEmitter {
         // 上传进度回调
         put.uploadProgress = { bytesSent, totalBytesSent, totalBytesExpectedToSend in
             let event: [String: Any] = [
+                "uploadId": uploadId,
                 "type": "progress",
                 "current": totalBytesSent,
                 "total": totalBytesExpectedToSend
@@ -88,18 +91,46 @@ class AliyunOss: RCTEventEmitter {
             }
         }
         
+        // 保存 request，方便 cancel
+        self.tasks[uploadId] = put
+
         // 开始上传
         let task = client.putObject(put)
         task.continue({ t -> Any? in
             DispatchQueue.main.async {
                 if let error = t.error {
+                    let event: [String: Any] = [
+                      "uploadId": uploadId,
+                      "type": "failed",
+                      "error": error.localizedDescription
+                    ]
+                    self.sendEvent(withName: "AliyunOssProgress", body: event)
                     reject("UPLOAD_EXCEPTION", "Upload failed", error)
+                } else if t.isCancelled {
+                    let event: [String: Any] = [
+                        "uploadId": uploadId,
+                        "type": "cancelled"
+                    ]
+                    self.sendEvent(withName: "AliyunOssProgress", body: event)
+                    reject("UPLOAD_CANCELLED", "Upload was cancelled", nil) 
                 } else {
                     resolve("OK: done")
                 }
+              // 上传结束后移除任务
+                self.tasks.removeValue(forKey: uploadId)
             }
             return nil
         })
+    }
+
+    // 取消上传
+    @objc func cancelUpload(_ uploadId: String) {
+        print("start cancel upload", uploadId)
+        if let task = tasks[uploadId] {
+            print("start cancel ", task)
+            task.cancel()
+            tasks.removeValue(forKey: uploadId)
+        }
     }
     
     // 示例方法

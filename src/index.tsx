@@ -46,34 +46,53 @@ export function initOSS(
 }
 
 // 简单上传（异步，带进度）
+// simpleUpload 支持多个任务
 export function simpleUpload(
   bucket: string,
   objectKey: string,
   filePath: string,
-  onProgress?: (current: number, total: number) => void
-): Promise<string> {
+  onProgress?: (current: number, total: number, taskId: string) => void,
+  onCancel?: () => void,
+  onFailed?: (error: any) => void
+): Promise<{ result: string; uploadId: string }> {
   return new Promise((resolve, reject) => {
-    // 监听进度事件
-    const subscription = AliyunOssEmitter.addListener(
+    const uploadId = `${bucket}:${objectKey}:${Date.now()}`;
+
+    const progressSub = AliyunOssEmitter.addListener(
       'AliyunOssProgress',
       (event) => {
+        if (event?.uploadId !== uploadId) return; // 只处理当前任务
+
         if (event?.type === 'progress' && onProgress) {
-          onProgress(event.current, event.total);
+          onProgress(event.current, event.total, event.uploadId);
+        } else if (event?.type === 'cancelled') {
+          progressSub.remove();
+          onCancel?.();
+          reject(new Error('Upload cancelled'));
+        } else if (event?.type === 'failed') {
+          progressSub.remove();
+          onFailed?.(event.error);
+          reject(new Error(event.error?.message || 'Upload failed'));
         }
       }
     );
 
-    // 调用原生上传
-    AliyunOss.simpleUpload(bucket, objectKey, filePath)
+    AliyunOss.simpleUpload(bucket, objectKey, filePath, uploadId)
       .then((res: string) => {
-        subscription.remove(); // 上传完成，移除监听
-        resolve(res);
+        progressSub.remove();
+        resolve({ result: res, uploadId });
       })
       .catch((err: any) => {
-        subscription.remove(); // 出错也要移除监听
+        progressSub.remove();
+        onFailed?.(err);
         reject(err);
       });
   });
+}
+
+// 取消指定任务
+export function cancelUpload(uploadId: string) {
+  AliyunOss.cancelUpload(uploadId);
 }
 
 // 断点续传上传

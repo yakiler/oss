@@ -49,14 +49,14 @@ export function initOSS(
 // simpleUpload 支持多个任务
 export function simpleUpload(
   bucket: string,
-  objectKey: string,
+  targetPath: string,
   filePath: string,
   onProgress?: (current: number, total: number, taskId: string) => void,
   onCancel?: () => void,
   onFailed?: (error: any) => void
 ): Promise<{ result: string; uploadId: string }> {
   return new Promise((resolve, reject) => {
-    const uploadId = `${bucket}:${objectKey}:${Date.now()}`;
+    const uploadId = `${bucket}:${targetPath}:${Date.now()}`;
 
     const progressSub = AliyunOssEmitter.addListener(
       'AliyunOssProgress',
@@ -77,7 +77,7 @@ export function simpleUpload(
       }
     );
 
-    AliyunOss.simpleUpload(bucket, objectKey, filePath, uploadId)
+    AliyunOss.simpleUpload(bucket, targetPath, filePath, uploadId)
       .then((res: string) => {
         progressSub.remove();
         resolve({ result: res, uploadId });
@@ -98,19 +98,19 @@ export function cancelUpload(uploadId: string) {
 // 断点续传上传
 export function resumableUpload(
   bucket: string,
-  objectKey: string,
+  targetPath: string,
   filePath: string,
   checkpointDir: string
 ): Promise<string> {
-  return AliyunOss.resumableUpload(bucket, objectKey, filePath, checkpointDir);
+  return AliyunOss.resumableUpload(bucket, targetPath, filePath, checkpointDir);
 }
 
 // 分片上传
 export function multipartUploadSync(
   bucket: string,
-  objectKey: string,
+  targetPath: string,
   filePath: string,
   partSize: number
 ): Promise<string> {
-  return AliyunOss.multipartUploadSync(bucket, objectKey, filePath, partSize);
+  return AliyunOss.multipartUploadSync(bucket, targetPath, filePath, partSize);
 }

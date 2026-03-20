@@ -96,7 +96,6 @@
   "workspaces": [
     "example"
   ],
-  "packageManager": "yarn@3.6.1",
   "jest": {
     "preset": "react-native",
     "modulePathIgnorePatterns": [
@@ -120,11 +119,14 @@
     "github": {
       "release": true
     },
-    "plugins": [{
-      "@release-it/conventional-changelog": {
-        "preset": "angular"
-      }
-    }, "jest"],
+    "plugins": [
+      {
+        "@release-it/conventional-changelog": {
+          "preset": "angular"
+        }
+      },
+      "jest"
+    ],
     "env": {
       "jest/globals": true
     }

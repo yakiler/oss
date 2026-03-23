@@ -43,6 +43,7 @@
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
     "prepare": "bob build",
+    "prepack": "bob build",
     "release": "release-it"
   },
   "keywords": [
@@ -96,7 +97,6 @@
   "workspaces": [
     "example"
   ],
-  "packageManager": "yarn@3.6.1",
   "jest": {
     "preset": "react-native",
     "modulePathIgnorePatterns": [
@@ -120,11 +120,14 @@
     "github": {
       "release": true
     },
-    "plugins": [{
-      "@release-it/conventional-changelog": {
-        "preset": "angular"
-      }
-    }, "jest"],
+    "plugins": [
+      {
+        "@release-it/conventional-changelog": {
+          "preset": "angular"
+        }
+      },
+      "jest"
+    ],
     "env": {
       "jest/globals": true
     }
